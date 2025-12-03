@@ -185,7 +185,7 @@ class WSClient(ABC):
             try:
                 await self.connect()
                 if self._resubscribed:
-                    self.resubscribe()
+                    await self.resubscribe()
                 self._resubscribed = True
                 await self._transport.wait_disconnected()
                 self._log.debug("Websocket disconnected.")
@@ -203,18 +203,18 @@ class WSClient(ABC):
             await asyncio.sleep(self._reconnect_interval)
 
     async def wait(self, timeout: float | None = None):
-        try:
-            if timeout is None:
+        if timeout is None:
                 await self._wait()
-            else:
+        else:
+            try:
                 await asyncio.wait_for(self._wait(), timeout=timeout)
-        except asyncio.TimeoutError:
-            pass
+            except asyncio.TimeoutError:
+                pass
 
     def send(self, payload: dict):
         if not self.connected:
             self._log.warning(
-                f"Websocket not connected. drop msg: {str(payload)}, please run `await connect()` first."
+                f"Websocket not connected. drop msg: {str(payload)}"
             )
             return
         self._transport.send(WSMsgType.TEXT, msgspec.json.encode(payload))
@@ -223,5 +223,5 @@ class WSClient(ABC):
         self._transport, self._listener = None, None
 
     @abstractmethod
-    def resubscribe(self):
+    async def resubscribe(self):
         pass

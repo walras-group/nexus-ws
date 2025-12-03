@@ -12,8 +12,7 @@ async def main():
     url = BinanceStreamUrl.USD_M_FUTURES
     client = BinanceWSClient(handler, url)
 
-    await client.connect()
-    client.subscribe_partial_book_depth(["ethusdt"], levels=20, update_speed="100ms")
+    await client.subscribe_partial_book_depth(["ethusdt"], levels=20, update_speed="100ms")
     await client.wait(timeout=10)
 
 

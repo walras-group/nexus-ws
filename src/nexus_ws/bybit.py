@@ -63,17 +63,18 @@ class BybitWSClient(WSClient):
             user_pong_callback=user_pong_callback,
         )
 
-    def _send_payload(self, params: List[str], chunk_size: int = 100):
+    async def _send_payload(self, params: List[str], chunk_size: int = 100, op: str = "subscribe"):
         # Split params into chunks of 100 if length exceeds 100
+        await self.connect()
         params_chunks = [
             params[i : i + chunk_size] for i in range(0, len(params), chunk_size)
         ]
 
         for chunk in params_chunks:
-            payload = {"op": "subscribe", "args": chunk}
+            payload = {"op": op, "args": chunk}
             self.send(payload)
 
-    def _subscribe(self, topics: List[str]):
+    async def _subscribe(self, topics: List[str]):
         topics = [topic for topic in topics if topic not in self._subscriptions]
 
         for topic in topics:
@@ -82,21 +83,20 @@ class BybitWSClient(WSClient):
 
         if not topics:
             return
-        self._send_payload(topics)
+        await self._send_payload(topics)
 
-    def _unsubscribe(self, topics: List[str]):
+    async def _unsubscribe(self, topics: List[str]):
         topics = [topic for topic in topics if topic in self._subscriptions]
 
         for topic in topics:
             self._subscriptions.remove(topic)
             self._log.debug(f"Unsubscribing from {topic}...")
 
-        payload = {"op": "unsubscribe", "args": topics}
         if not topics:
             return
-        self.send(payload)
+        await self._send_payload(topics, op="unsubscribe")
 
-    def subscribe_order_book(self, symbols: List[str], depth: ORDER_BOOK_DEPTH):
+    async def subscribe_order_book(self, symbols: List[str], depth: ORDER_BOOK_DEPTH):
         """
         subscribe to orderbook
 
@@ -107,37 +107,37 @@ class BybitWSClient(WSClient):
                 - for inverse/linear/spot, support 1,50,200,1000
         """
         topics = [f"orderbook.{depth}.{symbol}" for symbol in symbols]
-        self._subscribe(topics)
+        await self._subscribe(topics)
 
-    def subscribe_trade(self, symbols: List[str]):
+    async def subscribe_trade(self, symbols: List[str]):
         """subscribe to trade"""
         topics = [f"publicTrade.{symbol}" for symbol in symbols]
-        self._subscribe(topics)
+        await self._subscribe(topics)
 
-    def subscribe_ticker(self, symbols: List[str]):
+    async def subscribe_ticker(self, symbols: List[str]):
         """subscribe to ticker"""
         topics = [f"tickers.{symbol}" for symbol in symbols]
-        self._subscribe(topics)
+        await self._subscribe(topics)
 
-    def subscribe_kline(self, symbols: List[str], interval: KLINE_INTERVAL):
+    async def subscribe_kline(self, symbols: List[str], interval: KLINE_INTERVAL):
         """subscribe to kline"""
         topics = [f"kline.{interval}.{symbol}" for symbol in symbols]
-        self._subscribe(topics)
+        await self._subscribe(topics)
     
-    def subscribe_all_liquidation(self, symbols: List[str]):
+    async def subscribe_all_liquidation(self, symbols: List[str]):
         """subscribe to all liquidation"""
         topics = [f"allLiquidation.{symbol}" for symbol in symbols]
-        self._subscribe(topics)
+        await self._subscribe(topics)
     
-    def subscribe_insurance_pool(self, contract_types: List[CONTRACT_TYPE]):
+    async def subscribe_insurance_pool(self, contract_types: List[CONTRACT_TYPE]):
         """subscribe to insurance pool"""
         topics = [f"insurancePool.{contract_type}" for contract_type in contract_types]
-        self._subscribe(topics)
+        await self._subscribe(topics)
     
-    def subscribe_adl_alert(self, coins: List[CONTRACT_TYPE]):
+    async def subscribe_adl_alert(self, coins: List[CONTRACT_TYPE]):
         """subscribe to adl alert"""
         topics = [f"adlAlert.{coin}" for coin in coins]
-        self._subscribe(topics)
+        await self._subscribe(topics)
 
-    def resubscribe(self):
-        self._send_payload(self._subscriptions)
+    async def resubscribe(self):
+        await self._send_payload(self._subscriptions)
