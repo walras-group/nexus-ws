@@ -12,7 +12,7 @@ async def main():
     url = BybitStreamUrl.LINEAR
     client = BybitWSClient(handler, url)
 
-    await client.subscribe_trade(["BTCUSDT"])
+    client.subscribe_trade(["BTCUSDT"])
     await client.wait(timeout=10)
 
 
