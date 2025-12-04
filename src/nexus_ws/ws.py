@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import warnings
 import time
 import msgspec
 from abc import ABC, abstractmethod
@@ -169,9 +168,6 @@ class WSClient(ABC):
         return self._transport is not None
 
     async def _connect(self):
-        if self.connected:
-            return
-
         self._log.debug(f"Connecting to Websocket at {self._url}...")
         WSListenerFactory = lambda: Listener(  # noqa: E731
             self._callback,

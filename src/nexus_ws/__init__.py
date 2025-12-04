@@ -1,4 +1,12 @@
 from .binance import BinanceWSClient, BinanceStreamUrl
 from .bybit import BybitWSClient, BybitStreamUrl
+from .okx import OkxWSClient, OkxStreamUrl
 
-__all__ = ["BinanceWSClient", "BinanceStreamUrl", "BybitWSClient", "BybitStreamUrl"]
+__all__ = [
+    "BinanceWSClient",
+    "BinanceStreamUrl",
+    "BybitWSClient",
+    "BybitStreamUrl",
+    "OkxWSClient",
+    "OkxStreamUrl",
+]
