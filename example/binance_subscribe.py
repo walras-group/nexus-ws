@@ -10,10 +10,9 @@ def handler(raw: bytes):
 
 async def main():
     url = BinanceStreamUrl.USD_M_FUTURES
-    client = BinanceWSClient(handler, url)
-
-    await client.subscribe_markprice(["AIAUSDT"])
-    await client.wait()
+    async with BinanceWSClient(handler, url) as client:
+        client.subscribe_trade(["AIAUSDT"])
+        await asyncio.sleep(10)
 
 
 if __name__ == "__main__":

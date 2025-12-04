@@ -47,10 +47,9 @@ class BinanceWSClient(WSClient):
             enable_auto_ping=False,
         )
 
-    async def _send_payload(
+    def _send_payload(
         self, params: List[str], method: str = "SUBSCRIBE", chunk_size: int = 50
     ):
-        await self.connect()
         params_chunks = [
             params[i : i + chunk_size] for i in range(0, len(params), chunk_size)
         ]
@@ -63,7 +62,7 @@ class BinanceWSClient(WSClient):
             }
             self.send(payload)
 
-    async def _subscribe(self, params: List[str]):
+    def _subscribe(self, params: List[str]):
         params = [param for param in params if param not in self._subscriptions]
 
         if not params:
@@ -73,9 +72,9 @@ class BinanceWSClient(WSClient):
             self._subscriptions.append(param)
             self._log.debug(f"Subscribing to {param}...")
 
-        await self._send_payload(params, method="SUBSCRIBE")
+        # self._send_payload(params, method="SUBSCRIBE")
 
-    async def _unsubscribe(self, params: List[str]):
+    def _unsubscribe(self, params: List[str]):
         params = [param for param in params if param in self._subscriptions]
 
         if not params:
@@ -85,67 +84,67 @@ class BinanceWSClient(WSClient):
             self._subscriptions.remove(param)
             self._log.debug(f"Unsubscribing from {param}...")
 
-        await self._send_payload(params, method="UNSUBSCRIBE")
+        self._send_payload(params, method="UNSUBSCRIBE")
 
-    async def subscribe_trade(self, symbols: List[str]):
+    def subscribe_trade(self, symbols: List[str]):
         params = [f"{symbol.lower()}@trade" for symbol in symbols]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_aggtrade(self, symbols: List[str]):
+    def subscribe_aggtrade(self, symbols: List[str]):
         params = [f"{symbol.lower()}@aggTrade" for symbol in symbols]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_markprice(
+    def subscribe_markprice(
         self, symbols: List[str], interval: MARK_PRICE_INTERVAL | None = None
     ):
         if interval == "1s":
             params = [f"{symbol.lower()}@markPrice@1s" for symbol in symbols]
         else:
             params = [f"{symbol.lower()}@markPrice" for symbol in symbols]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_all_markprice(self, interval: MARK_PRICE_INTERVAL | None = None):
+    def subscribe_all_markprice(self, interval: MARK_PRICE_INTERVAL | None = None):
         if interval == "1s":
             params = ["!markPrice@arr@1s"]
         else:
             params = ["!markPrice@arr"]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_kline(self, symbols: List[str], interval: KLINE_INTERVAL):
+    def subscribe_kline(self, symbols: List[str], interval: KLINE_INTERVAL):
         params = [f"{symbol.lower()}@kline_{interval}" for symbol in symbols]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_continuous_kline(
+    def subscribe_continuous_kline(
         self, pair: str, contract_type: CONTRACT_TYPE, interval: KLINE_INTERVAL
     ):
         params = [f"{pair.lower()}@continuousKline_{contract_type}_{interval}"]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_mini_ticker(self, symbols: List[str]):
+    def subscribe_mini_ticker(self, symbols: List[str]):
         params = [f"{symbol.lower()}@miniTicker" for symbol in symbols]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_all_mini_ticker(self):
+    def subscribe_all_mini_ticker(self):
         params = ["!miniTicker@arr"]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_book_ticker(self, symbols: List[str]):
+    def subscribe_book_ticker(self, symbols: List[str]):
         params = [f"{symbol.lower()}@bookTicker" for symbol in symbols]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_all_book_ticker(self):
+    def subscribe_all_book_ticker(self):
         params = ["!bookTicker"]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_force_order(self, symbols: List[str]):
+    def subscribe_force_order(self, symbols: List[str]):
         params = [f"{symbol.lower()}@forceOrder" for symbol in symbols]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_all_force_order(self):
+    def subscribe_all_force_order(self):
         params = ["!forceOrder@arr"]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_partial_book_depth(
+    def subscribe_partial_book_depth(
         self,
         symbols: List[str],
         levels: PARTIAL_BOOK_DEPTH_LEVELS,
@@ -157,16 +156,16 @@ class BinanceWSClient(WSClient):
             params = [
                 f"{symbol.lower()}@depth{levels}@{update_speed}" for symbol in symbols
             ]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def subscribe_diff_book_depth(
+    def subscribe_diff_book_depth(
         self, symbols: List[str], update_speed: BOOK_DEPTH_UPDATE_SPEED
     ):
         if update_speed == "250ms":
             params = [f"{symbol.lower()}@depth" for symbol in symbols]
         else:
             params = [f"{symbol.lower()}@depth@{update_speed}" for symbol in symbols]
-        await self._subscribe(params)
+        self._subscribe(params)
 
-    async def resubscribe(self):
-        await self._send_payload(self._subscriptions)
+    def resubscribe(self):
+        self._send_payload(self._subscriptions)

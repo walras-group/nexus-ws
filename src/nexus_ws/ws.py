@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import warnings
 import time
 import msgspec
 from abc import ABC, abstractmethod
@@ -142,6 +143,7 @@ class WSClient(ABC):
         self._listener: Listener = None
         self._transport = None
         self._subscriptions = []
+        self._wait_task: asyncio.Task | None = None
         self._callback = handler
         if auto_ping_strategy == "ping_when_idle":
             self._auto_ping_strategy = WSAutoPingStrategy.PING_WHEN_IDLE
@@ -149,7 +151,15 @@ class WSClient(ABC):
             self._auto_ping_strategy = WSAutoPingStrategy.PING_PERIODICALLY
         self._log = logging.getLogger(name=str(self.__class__.__name__))
 
-        self._resubscribed: bool = False
+    async def __aenter__(self):
+        """Enter async context manager."""
+        self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit async context manager."""
+        await self.stop()
+        return False  # Don't suppress exceptions
 
     def timestamp_ms(self) -> int:
         return int(time.time() * 1000)
@@ -158,7 +168,7 @@ class WSClient(ABC):
     def connected(self) -> bool:
         return self._transport is not None
 
-    async def connect(self):
+    async def _connect(self):
         if self.connected:
             return
 
@@ -183,10 +193,8 @@ class WSClient(ABC):
     async def _wait(self):
         while True:
             try:
-                await self.connect()
-                if self._resubscribed:
-                    await self.resubscribe()
-                self._resubscribed = True
+                await self._connect()
+                self.resubscribe()
                 await self._transport.wait_disconnected()
                 self._log.debug("Websocket disconnected.")
             except asyncio.CancelledError:
@@ -204,18 +212,35 @@ class WSClient(ABC):
 
     async def wait(self, timeout: float | None = None):
         if timeout is None:
-                await self._wait()
+            await self._wait()
         else:
             try:
                 await asyncio.wait_for(self._wait(), timeout=timeout)
             except asyncio.TimeoutError:
                 pass
 
+    def start(self) -> asyncio.Task:
+        """Start the internal wait loop as a background asyncio task."""
+        if self._wait_task and not self._wait_task.done():
+            self._log.debug("Websocket wait loop already running.")
+            return self._wait_task
+        self._wait_task = asyncio.create_task(self._wait())
+        return self._wait_task
+
+    async def stop(self) -> None:
+        """Cancel the background wait loop if it is running."""
+        if not self._wait_task:
+            return
+        task, self._wait_task = self._wait_task, None
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            self._log.info("Websocket wait loop cancelled via stop().")
+
     def send(self, payload: dict):
         if not self.connected:
-            self._log.warning(
-                f"Websocket not connected. drop msg: {str(payload)}"
-            )
+            self._log.warning(f"Websocket not connected. drop msg: {str(payload)}")
             return
         self._transport.send(WSMsgType.TEXT, msgspec.json.encode(payload))
 
@@ -223,5 +248,5 @@ class WSClient(ABC):
         self._transport, self._listener = None, None
 
     @abstractmethod
-    async def resubscribe(self):
+    def resubscribe(self):
         pass
