@@ -44,7 +44,7 @@ class Listener(WSListener):
         self._callback = callback
 
         if user_pong_callback:
-            self.is_user_specific_pong = MethodType(user_pong_callback, self)
+            self.is_user_specific_pong = MethodType(user_pong_callback, self) # type: ignore
 
     def send_user_specific_ping(self, transport: WSTransport) -> None:
         """Send a custom ping message or default ping frame.
@@ -120,7 +120,7 @@ class WSClient(ABC):
         self,
         url: str,
         handler: Callable[..., Any],
-        specific_ping_msg: bytes = None,
+        specific_ping_msg: bytes | None = None,
         reconnect_interval: int = 1,
         ping_idle_timeout: int = 2,
         ping_reply_timeout: int = 1,
@@ -139,7 +139,7 @@ class WSClient(ABC):
         self._enable_auto_pong = enable_auto_pong
         self._enable_auto_ping = enable_auto_ping
         self._user_pong_callback = user_pong_callback
-        self._listener: Listener = None
+        self._listener: WSListener | None = None
         self._transport = None
         self._subscriptions = []
         self._wait_task: asyncio.Task | None = None
@@ -191,7 +191,7 @@ class WSClient(ABC):
             try:
                 await self._connect()
                 self.resubscribe()
-                await self._transport.wait_disconnected()
+                await self._transport.wait_disconnected() # type: ignore
                 self._log.debug("Websocket disconnected.")
             except asyncio.CancelledError:
                 self._log.info("Websocket connection loop cancelled.")
@@ -238,7 +238,7 @@ class WSClient(ABC):
         if not self.connected:
             self._log.warning(f"Websocket not connected. drop msg: {str(payload)}")
             return
-        self._transport.send(WSMsgType.TEXT, msgspec.json.encode(payload))
+        self._transport.send(WSMsgType.TEXT, msgspec.json.encode(payload)) # type: ignore
 
     def _clean_up(self):
         self._transport, self._listener = None, None

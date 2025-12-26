@@ -28,7 +28,7 @@ class BybitPingMsg(msgspec.Struct):
 
     @property
     def is_pong(self) -> bool:
-        return self.ret_msg or self.op == "pong"
+        return self.ret_msg == "pong" or self.op == "pong"
 
 
 def user_pong_callback(self: Listener, frame: picows.WSFrame) -> bool:
