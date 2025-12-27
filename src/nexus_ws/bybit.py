@@ -1,5 +1,7 @@
 import picows
+import time
 import msgspec
+import hmac
 from enum import Enum
 from typing import Any, Callable, List, Literal
 
@@ -12,6 +14,32 @@ class BybitStreamUrl(Enum):
     LINEAR = "wss://stream.bybit.com/v5/public/linear"
     INVERSE = "wss://stream.bybit.com/v5/public/inverse"
     OPTION = "wss://stream.bybit.com/v5/public/option"
+    PRIVATE = "wss://stream.bybit.com/v5/private"
+
+    @property
+    def is_private(self) -> bool:
+        return self == BybitStreamUrl.PRIVATE
+
+    @property
+    def is_public(self) -> bool:
+        return not self.is_private
+
+
+class BybitTestnetStreamUrl(Enum):
+    SPOT = "wss://stream-testnet.bybit.com/v5/public/spot"
+    LINEAR = "wss://stream-testnet.bybit.com/v5/public/linear"
+    INVERSE = "wss://stream-testnet.bybit.com/v5/public/inverse"
+    OPTION = "wss://stream-testnet.bybit.com/v5/public/option"
+    PRIVATE = "wss://stream-testnet.bybit.com/v5/private"
+
+    @property
+    def is_private(self) -> bool:
+        return self == BybitTestnetStreamUrl.PRIVATE
+
+    @property
+    def is_public(self) -> bool:
+        return not self.is_private
+
 
 
 KLINE_INTERVAL = Literal[
@@ -20,6 +48,23 @@ KLINE_INTERVAL = Literal[
 
 ORDER_BOOK_DEPTH = Literal[1, 25, 50, 100, 200, 1000]
 CONTRACT_TYPE = Literal["USDT", "USDC", "inverse"]
+
+POSITION_TOPICS = Literal[
+    "position", "position.linear", "position.inverse", "position.option"
+]
+
+EXECUTION_TOPICS = Literal[
+    "execution", "execution.linear", "execution.inverse", "execution.option"
+]
+
+EXECUTION_FAST_TOPICS = Literal[
+    "execution.fast",
+    "execution.fast.linear",
+    "execution.fast.inverse",
+    "execution.fast.option",
+]
+
+ORDER_TOPICS = Literal["order", "order.linear", "order.inverse", "order.option"]
 
 
 class BybitPingMsg(msgspec.Struct):
@@ -52,7 +97,9 @@ class BybitWSClient(WSClient):
     def __init__(
         self,
         handler: Callable[..., Any],
-        url: BybitStreamUrl,
+        url: BybitStreamUrl | BybitTestnetStreamUrl,
+        api_key: str | None = None,
+        secret: str | None = None,
     ):
         super().__init__(
             url.value,
@@ -63,6 +110,41 @@ class BybitWSClient(WSClient):
             auto_ping_strategy="ping_when_idle",
             user_pong_callback=user_pong_callback,
         )
+
+        self._api_key = api_key
+        self._secret = secret
+
+        # validate api_key and secret
+        # api_key and secret must be all None or all not None
+        if (self._api_key is None) != (self._secret is None):
+            raise ValueError("api_key and secret must be provided together")
+
+        if self._api_key and not url.is_private:
+            raise ValueError(
+                "api_key and secret can only be used with private stream url"
+            )
+
+    def auth(self):
+        self.send(self._get_auth_payload())
+        time.sleep(5)  # wait for auth response
+
+    def _generate_signature(self):
+        if self._secret is None:
+            raise ValueError("Secret key is not set for signature generation")
+
+        expires = self.timestamp_ms() + 1_000
+        signature = str(
+            hmac.new(
+                bytes(self._secret, "utf-8"),
+                bytes(f"GET/realtime{expires}", "utf-8"),
+                digestmod="sha256",
+            ).hexdigest()
+        )
+        return signature, expires
+
+    def _get_auth_payload(self):
+        signature, expires = self._generate_signature()
+        return {"op": "auth", "args": [self._api_key, expires, signature]}
 
     def _send_payload(
         self, params: List[str], chunk_size: int = 100, op: str = "subscribe"
@@ -141,5 +223,31 @@ class BybitWSClient(WSClient):
         topics = [f"adlAlert.{coin}" for coin in coins]
         self._subscribe(topics)
 
+    def subscribe_position(self, topic: POSITION_TOPICS = "position"):
+        """subscribe to position updates"""
+        self._subscribe([topic])
+
+    def subscribe_execution(self, topic: EXECUTION_TOPICS = "execution"):
+        """subscribe to execution updates"""
+        self._subscribe([topic])
+
+    def subscribe_fast_execution(self, topic: EXECUTION_FAST_TOPICS = "execution.fast"):
+        """subscribe to fast execution updates"""
+        self._subscribe([topic])
+
+    def subscribe_orders(self, topic: ORDER_TOPICS = "order"):
+        """subscribe to orders updates"""
+        self._subscribe([topic])
+
+    def subscribe_wallet(self):
+        """subscribe to wallet updates"""
+        self._subscribe(["wallet"])
+
+    def subscribe_greeks(self):
+        """subscribe to greeks updates"""
+        self._subscribe(["greeks"])
+
     def resubscribe(self):
+        if self._api_key is not None:
+            self.auth()
         self._send_payload(self._subscriptions)

@@ -166,6 +166,10 @@ class BinanceWSClient(WSClient):
         else:
             params = [f"{symbol.lower()}@depth@{update_speed}" for symbol in symbols]
         self._subscribe(params)
+    
+    def subscribe_user_data_stream(self, listen_key: str):
+        self._subscribe([listen_key])
+
 
     def resubscribe(self):
         self._send_payload(self._subscriptions)
