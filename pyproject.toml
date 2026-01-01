@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "msgspec>=0.20.0",
+    "msgspec<0.20.0",
     "picows>=1.10.1",
 ]
 
