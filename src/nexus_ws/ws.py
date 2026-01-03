@@ -184,7 +184,7 @@ class WSClient(ABC):
             auto_ping_strategy=self._auto_ping_strategy,
             enable_auto_pong=self._enable_auto_pong,
         )
-        self._log.info("Websocket connected successfully.")
+        self._log.info(f"Websocket connected successfully to {self._url}.")
 
     async def _wait(self):
         while True:
