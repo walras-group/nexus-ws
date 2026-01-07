@@ -173,5 +173,5 @@ class BinanceWSClient(WSClient):
     def subscribe_user_data_stream(self, listen_key: str):
         self._subscribe([listen_key])
 
-    def resubscribe(self):
+    async def resubscribe(self):
         self._send_payload(self._subscriptions)

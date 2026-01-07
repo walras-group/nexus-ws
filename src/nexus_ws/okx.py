@@ -1,7 +1,7 @@
 import picows
 import hmac
 import base64
-import time
+import asyncio
 from enum import Enum
 from typing import Any, Callable, List, Literal, Dict
 
@@ -114,7 +114,7 @@ class OkxWSClient(WSClient):
         if self._secret is None:
             raise ValueError("Secret is missing.")
 
-        timestamp = int(time.time())
+        timestamp = int(self.timestamp())
         message = str(timestamp) + "GET" + "/users/self/verify"
         mac = hmac.new(
             bytes(self._secret, encoding="utf8"),
@@ -134,10 +134,10 @@ class OkxWSClient(WSClient):
         payload = {"op": "login", "args": [arg]}
         return payload
 
-    def auth(self):
+    async def auth(self):
         payload = self._get_auth_payload()
         self.send(payload)
-        time.sleep(5)  # wait for auth to complete
+        await asyncio.sleep(5)  # wait for auth to complete
 
     def _send_payload(
         self,
@@ -269,9 +269,9 @@ class OkxWSClient(WSClient):
         params = [{"channel": channel, "instId": symbol} for symbol in symbols]
         self._unsubscribe(params)
 
-    def resubscribe(self):
+    async def resubscribe(self):
         if self._api_key is not None:
-            self.auth()
+            await self.auth()
         self._send_payload(self._subscriptions)
 
     def subscribe_orders(

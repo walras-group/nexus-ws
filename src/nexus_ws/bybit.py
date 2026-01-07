@@ -1,5 +1,5 @@
+import asyncio
 import picows
-import time
 import msgspec
 import hmac
 from enum import Enum
@@ -125,10 +125,10 @@ class BybitWSClient(WSClient):
                 "api_key and secret can only be used with private stream url"
             )
 
-    def auth(self):
+    async def auth(self):
         self._log.debug("Authenticating...")
         self.send(self._get_auth_payload())
-        time.sleep(5)  # wait for auth response
+        await asyncio.sleep(5)  # wait for auth response
         self._log.debug("Authentication payload sent.")
 
     def _generate_signature(self):
@@ -250,7 +250,7 @@ class BybitWSClient(WSClient):
         """subscribe to greeks updates"""
         self._subscribe(["greeks"])
 
-    def resubscribe(self):
+    async def resubscribe(self):
         if self._api_key is not None:
             self.auth()
         self._send_payload(self._subscriptions)

@@ -172,6 +172,9 @@ class WSClient(ABC):
     def timestamp_ms(self) -> int:
         return int(time.time() * 1000)
 
+    def timestamp(self) -> float:
+        return time.time()
+
     @property
     def connected(self) -> bool:
         return self._transport is not None
@@ -199,7 +202,7 @@ class WSClient(ABC):
         while True:
             try:
                 await self._connect()
-                self.resubscribe()
+                await self.resubscribe()
                 await self._transport.wait_disconnected()  # type: ignore
                 self._log.debug("Websocket disconnected.")
             except asyncio.CancelledError:
@@ -291,5 +294,5 @@ class WSClient(ABC):
         self._transport, self._listener = None, None
 
     @abstractmethod
-    def resubscribe(self):
+    async def resubscribe(self):
         pass
