@@ -100,6 +100,8 @@ class BybitWSClient(WSClient):
         api_key: str | None = None,
         secret: str | None = None,
         auto_reconnect_interval: int | None = None,
+        max_subscriptions_per_client: int | None = None,
+        max_clients: int | None = None,
     ):
         super().__init__(
             url.value,
@@ -110,6 +112,8 @@ class BybitWSClient(WSClient):
             auto_ping_strategy="ping_when_idle",
             user_pong_callback=user_pong_callback,
             auto_reconnect_interval=auto_reconnect_interval,
+            max_subscriptions_per_client=max_subscriptions_per_client,
+            max_clients=max_clients,
         )
 
         self._api_key = api_key
@@ -125,9 +129,9 @@ class BybitWSClient(WSClient):
                 "api_key and secret can only be used with private stream url"
             )
 
-    async def auth(self):
+    async def auth(self, client_id: int | None = None):
         self._log.debug("Authenticating...")
-        self.send(self._get_auth_payload())
+        self.send(self._get_auth_payload(), client_id=client_id)
         await asyncio.sleep(5)  # wait for auth response
         self._log.debug("Authentication payload sent.")
 
@@ -150,7 +154,11 @@ class BybitWSClient(WSClient):
         return {"op": "auth", "args": [self._api_key, expires, signature]}
 
     def _send_payload(
-        self, params: List[str], chunk_size: int = 100, op: str = "subscribe"
+        self,
+        params: List[str],
+        chunk_size: int = 100,
+        op: str = "subscribe",
+        client_id: int | None = None,
     ):
         # Split params into chunks of 100 if length exceeds 100
         params_chunks = [
@@ -159,29 +167,31 @@ class BybitWSClient(WSClient):
 
         for chunk in params_chunks:
             payload = {"op": op, "args": chunk}
-            self.send(payload)
+            self.send(payload, client_id=client_id)
 
     def _subscribe(self, topics: List[str]):
         topics = [topic for topic in topics if topic not in self._subscriptions]
 
         for topic in topics:
-            self._subscriptions.append(topic)
             self._log.debug(f"Subscribing to {topic}...")
 
         if not topics:
             return
-        # self._send_payload(topics)
+
+        self._register_subscriptions(topics)
 
     def _unsubscribe(self, topics: List[str]):
-        topics = [topic for topic in topics if topic in self._subscriptions]
-
-        for topic in topics:
-            self._subscriptions.remove(topic)
-            self._log.debug(f"Unsubscribing from {topic}...")
-
         if not topics:
             return
-        self._send_payload(topics, op="unsubscribe")
+
+        removed = self._unregister_subscriptions(topics)
+        if not removed:
+            return
+
+        for client_id, client_topics in removed.items():
+            for topic in client_topics:
+                self._log.debug(f"Unsubscribing from {topic}...")
+            self._send_payload(client_topics, op="unsubscribe", client_id=client_id)
 
     def subscribe_order_book(self, symbols: List[str], depth: ORDER_BOOK_DEPTH):
         """
@@ -250,7 +260,9 @@ class BybitWSClient(WSClient):
         """subscribe to greeks updates"""
         self._subscribe(["greeks"])
 
-    async def resubscribe(self):
+    async def _resubscribe_for_client(self, client_id: int, subscriptions: List[str]):
+        if not subscriptions:
+            return
         if self._api_key is not None:
-            await self.auth()
-        self._send_payload(self._subscriptions)
+            await self.auth(client_id=client_id)
+        self._send_payload(subscriptions, client_id=client_id)

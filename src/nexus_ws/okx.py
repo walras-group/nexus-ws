@@ -82,6 +82,8 @@ class OkxWSClient(WSClient):
         secret: str | None = None,
         passphrase: str | None = None,
         auto_reconnect_interval: int | None = None,
+        max_subscriptions_per_client: int | None = None,
+        max_clients: int | None = None,
     ):
         self._business = url == OkxStreamUrl.BUSINESS
         super().__init__(
@@ -92,6 +94,8 @@ class OkxWSClient(WSClient):
             ping_reply_timeout=2,
             user_pong_callback=user_pong_callback,
             auto_reconnect_interval=auto_reconnect_interval,
+            max_subscriptions_per_client=max_subscriptions_per_client,
+            max_clients=max_clients,
         )
 
         self._api_key = api_key
@@ -134,9 +138,9 @@ class OkxWSClient(WSClient):
         payload = {"op": "login", "args": [arg]}
         return payload
 
-    async def auth(self):
+    async def auth(self, client_id: int | None = None):
         payload = self._get_auth_payload()
-        self.send(payload)
+        self.send(payload, client_id=client_id)
         await asyncio.sleep(5)  # wait for auth to complete
 
     def _send_payload(
@@ -144,6 +148,7 @@ class OkxWSClient(WSClient):
         params: List[Dict[str, Any]],
         op: Literal["subscribe", "unsubscribe"] = "subscribe",
         chunk_size: int = 100,
+        client_id: int | None = None,
     ):
         # Split params into chunks of 100 if length exceeds 100
         params_chunks = [
@@ -155,17 +160,17 @@ class OkxWSClient(WSClient):
                 "op": op,
                 "args": chunk,
             }
-            self.send(payload)
+            self.send(payload, client_id=client_id)
 
     def _subscribe(self, params: List[Dict[str, Any]]):
         params = [param for param in params if param not in self._subscriptions]
 
         for param in params:
-            self._subscriptions.append(param)
             self._log.debug(f"Subscribing to {param}...")
 
         if not params:
             return
+        self._register_subscriptions(params)
 
     def subscribe_funding_rate(self, symbols: List[str]):
         params = [{"channel": "funding-rate", "instId": symbol} for symbol in symbols]
@@ -224,16 +229,15 @@ class OkxWSClient(WSClient):
         self._subscribe(params)
 
     def _unsubscribe(self, params: List[Dict[str, Any]]):
-        params_to_unsubscribe = [
-            param for param in params if param in self._subscriptions
-        ]
-
-        for param in params_to_unsubscribe:
-            self._subscriptions.remove(param)
-            self._log.debug(f"Unsubscribing from {param}...")
-
-        if params_to_unsubscribe:
-            self._send_payload(params_to_unsubscribe, op="unsubscribe")
+        if not params:
+            return
+        removed = self._unregister_subscriptions(params)
+        if not removed:
+            return
+        for client_id, client_params in removed.items():
+            for param in client_params:
+                self._log.debug(f"Unsubscribing from {param}...")
+            self._send_payload(client_params, op="unsubscribe", client_id=client_id)
 
     def unsubscribe_funding_rate(self, symbols: List[str]):
         params = [{"channel": "funding-rate", "instId": symbol} for symbol in symbols]
@@ -269,10 +273,14 @@ class OkxWSClient(WSClient):
         params = [{"channel": channel, "instId": symbol} for symbol in symbols]
         self._unsubscribe(params)
 
-    async def resubscribe(self):
+    async def _resubscribe_for_client(
+        self, client_id: int, subscriptions: List[Dict[str, Any]]
+    ):
+        if not subscriptions:
+            return
         if self._api_key is not None:
-            await self.auth()
-        self._send_payload(self._subscriptions)
+            await self.auth(client_id=client_id)
+        self._send_payload(subscriptions, client_id=client_id)
 
     def subscribe_orders(
         self,

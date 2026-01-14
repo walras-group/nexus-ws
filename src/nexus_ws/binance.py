@@ -42,16 +42,24 @@ class BinanceWSClient(WSClient):
         handler: Callable[..., Any],
         url: BinanceStreamUrl,
         auto_reconnect_interval: int | None = None,
+        max_subscriptions_per_client: int | None = None,
+        max_clients: int | None = None,
     ):
         super().__init__(
             url.value,
             handler=handler,
             enable_auto_ping=False,
             auto_reconnect_interval=auto_reconnect_interval,
+            max_subscriptions_per_client=max_subscriptions_per_client,
+            max_clients=max_clients,
         )
 
     def _send_payload(
-        self, params: List[str], method: str = "SUBSCRIBE", chunk_size: int = 50
+        self,
+        params: List[str],
+        method: str = "SUBSCRIBE",
+        chunk_size: int = 50,
+        client_id: int | None = None,
     ):
         params_chunks = [
             params[i : i + chunk_size] for i in range(0, len(params), chunk_size)
@@ -63,7 +71,7 @@ class BinanceWSClient(WSClient):
                 "params": chunk,
                 "id": self.timestamp_ms(),
             }
-            self.send(payload)
+            self.send(payload, client_id=client_id)
 
     def _subscribe(self, params: List[str]):
         params = [param for param in params if param not in self._subscriptions]
@@ -72,22 +80,22 @@ class BinanceWSClient(WSClient):
             return
 
         for param in params:
-            self._subscriptions.append(param)
             self._log.debug(f"Subscribing to {param}...")
 
-        # self._send_payload(params, method="SUBSCRIBE")
+        self._register_subscriptions(params)
 
     def _unsubscribe(self, params: List[str]):
-        params = [param for param in params if param in self._subscriptions]
-
         if not params:
             return
 
-        for param in params:
-            self._subscriptions.remove(param)
-            self._log.debug(f"Unsubscribing from {param}...")
+        removed = self._unregister_subscriptions(params)
+        if not removed:
+            return
 
-        self._send_payload(params, method="UNSUBSCRIBE")
+        for client_id, client_params in removed.items():
+            for param in client_params:
+                self._log.debug(f"Unsubscribing from {param}...")
+            self._send_payload(client_params, method="UNSUBSCRIBE", client_id=client_id)
 
     def subscribe_trade(self, symbols: List[str]):
         params = [f"{symbol.lower()}@trade" for symbol in symbols]
@@ -173,5 +181,7 @@ class BinanceWSClient(WSClient):
     def subscribe_user_data_stream(self, listen_key: str):
         self._subscribe([listen_key])
 
-    async def resubscribe(self):
-        self._send_payload(self._subscriptions)
+    async def _resubscribe_for_client(self, client_id: int, subscriptions: List[str]):
+        if not subscriptions:
+            return
+        self._send_payload(subscriptions, client_id=client_id)
