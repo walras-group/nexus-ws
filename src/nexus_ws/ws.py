@@ -262,8 +262,12 @@ class WSClient(ABC):
             self._subscriptions.remove(subscription)
         return removed
 
+    def _url_for_client(self, client_id: int) -> str:
+        return self._url
+
     async def _connect(self, client_id: int):
-        self._log.debug(f"Connecting to Websocket at {self._url} (client {client_id})...")
+        url = self._url_for_client(client_id)
+        self._log.debug(f"Connecting to Websocket at {url} (client {client_id})...")
         WSListenerFactory = lambda: Listener(  # noqa: E731
             self._callback,
             self._log,
@@ -272,7 +276,7 @@ class WSClient(ABC):
         )
         transport, listener = await ws_connect(
             WSListenerFactory,
-            self._url,
+            url,
             enable_auto_ping=self._enable_auto_ping,
             auto_ping_idle_timeout=self._ping_idle_timeout,
             auto_ping_reply_timeout=self._ping_reply_timeout,
@@ -282,7 +286,7 @@ class WSClient(ABC):
         self._transports[client_id] = transport
         self._listeners[client_id] = listener
         self._log.info(
-            f"Websocket connected successfully to {self._url} (client {client_id})."
+            f"Websocket connected successfully to {url} (client {client_id})."
         )
 
     async def _wait(self, client_id: int):
